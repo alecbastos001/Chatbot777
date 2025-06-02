@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot WhatsApp Web</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'whatsapp-dark-green': '#075E54',
+                        'whatsapp-light-green': '#128C7E',
+                        'whatsapp-chat-bg': '#ECE5DD',
+                        'whatsapp-user-bubble': '#DCF8C6',
+                        'whatsapp-bot-bubble': '#FFFFFF',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden; /* Evita barras de rolagem indesejadas no corpo */
+            background-color: #ECE5DD; /* Cor de fundo para o body */
+        }
+        .text-whatsapp-timestamp {
+            color: #828282;
+            font-size: 0.65rem; /* Ajuste para ser um pouco menor */
+        }
+        .whatsapp-background-pattern {
+            /* Usando um padrão de formas geométricas sutis com mais opacidade */
+            background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M0 40L40 0H20L0 20V40ZM40 40V20L20 40H40Z'/%3E%3C/g%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 40px;
+            background-color: #ECE5DD; /* Cor de fallback */
+            animation: backgroundPan 60s linear infinite; /* Animação de movimento lento */
+        }
+
+        @keyframes backgroundPan {
+            from { background-position: 0% 0%; }
+            to { background-position: 100% 100%; }
+        }
+
+        .rounded-message-user {
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+            border-bottom-left-radius: 0.5rem;
+            border-bottom-right-radius: 0.1rem; /* Canto inferior direito mais reto */
+        }
+        .rounded-message-bot {
+            border-top-left-radius: 0.5rem;
+            border-top-right-radius: 0.5rem;
+            border-bottom-left-radius: 0.1rem; /* Canto inferior esquerdo mais reto */
+            border-bottom-right-radius: 0.5rem;
+        }
+
+        /* Animação de fade-in para mensagens */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .message-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        /* Animação de entrada para a área principal do chat (aplicada ao #root) */
+        @keyframes siteLoadAnimation {
+            from { opacity: 0; transform: scale(0.98); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        #root {
+            animation: siteLoadAnimation 0.6s ease-out forwards;
+        }
+
+        /* Estilos e animação para o indicador de digitação */
+        .typing-indicator span {
+            animation: blink 1s infinite;
+        }
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+        /* Ícones de visto */
+        .checkmark-single {
+            fill: currentColor;
+            width: 14px;
+            height: 14px;
+            margin-left: 4px;
+            vertical-align: middle;
+            color: #607d8b; /* Cor cinza para o visto único */
+        }
+        .checkmark-double {
+            fill: currentColor;
+            width: 14px;
+            height: 14px;
+            margin-left: 4px;
+            vertical-align: middle;
+            color: #4CAF50; /* Cor verde para os vistos duplos (lido) */
+        }
+
+        /* Animação para o ecrã de carregamento */
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; visibility: hidden; }
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #075E54; /* Cor de fundo do WhatsApp */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            opacity: 1;
+            transition: opacity 0.5s ease-out;
+        }
+        .loading-overlay.hidden {
+            animation: fadeOut 0.5s forwards;
+        }
+
+        .loading-spinner {
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #fff;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <div id="root" class="opacity-0"></div> <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        // Componente principal da aplicação
+        function App() {
+            const [messages, setMessages] = React.useState([]);
+            const [inputMessage, setInputMessage] = React.useState('');
+            const [isBotTyping, setIsBotTyping] = React.useState(false);
+            const messagesEndRef = React.useRef(null);
+
+            // Função para rolar para o final das mensagens
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+
+            // Efeito para rolar para o final sempre que as mensagens mudarem
+            React.useEffect(() => {
+                scrollToBottom();
+            }, [messages, isBotTyping]);
+
+            // Mensagem de boas-vindas inicial do bot com atraso e indicador de digitação
+            React.useEffect(() => {
+                const loadingOverlay = document.getElementById('loading-overlay');
+                const rootElement = document.getElementById('root');
+
+                // Esconde o ecrã de carregamento e mostra o conteúdo após um pequeno atraso
+                setTimeout(() => {
+                    loadingOverlay.classList.add('hidden');
+                    rootElement.classList.remove('opacity-0'); // Torna o conteúdo visível
+                    rootElement.classList.add('opacity-100'); // Garante a opacidade total
+                }, 1000); // Tempo de exibição do ecrã de carregamento
+
+                // Simula o bot a digitar a mensagem inicial
+                setTimeout(() => {
+                    setIsBotTyping(true);
+                    setTimeout(() => {
+                        const initialMessages = [
+                            {
+                                id: 1,
+                                text: 'Olá! Sou o seu assistente virtual da Mentoria777. Estou aqui para te ajudar a impulsionar os seus resultados. Como posso auxiliá-lo(a) hoje?',
+                                sender: 'bot',
+                                timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                            }
+                        ];
+                        setMessages(initialMessages);
+                        setIsBotTyping(false);
+                    }, 1500); // Tempo para o bot "digitar" a primeira mensagem
+                }, 1500); // Atraso antes do bot começar a digitar
+            }, []); // Executa apenas uma vez ao montar o componente
+
+            // Função para lidar com o envio de uma mensagem
+            const handleSendMessage = async () => {
+                if (inputMessage.trim() === '') return;
+
+                const newMessage = {
+                    id: Date.now(),
+                    text: inputMessage,
+                    sender: 'user',
+                    timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                    status: 'sent'
+                };
+
+                setMessages((prevMessages) => [...prevMessages, newMessage]);
+                setInputMessage('');
+                setIsBotTyping(true); // O bot começa a "digitar"
+
+                // Simula a entrega e leitura da mensagem do usuário
+                setTimeout(() => {
+                    setMessages((prevMessages) =>
+                        prevMessages.map((msg) =>
+                            msg.id === newMessage.id ? { ...msg, status: 'delivered' } : msg
+                        )
+                    );
+                }, 500); // Visto único após 0.5s
+
+                setTimeout(() => {
+                    setMessages((prevMessages) =>
+                        prevMessages.map((msg) =>
+                            msg.id === newMessage.id ? { ...msg, status: 'read' } : msg
+                        )
+                    );
+                }, 1000); // Visto duplo após 1s
+
+                // Chamada à API do Gemini
+                try {
+                    let chatHistory = [{ role: "user", parts: [{ text: inputMessage }] }];
+                    const payload = { contents: chatHistory };
+                    const apiKey = "AIzaSyBeYR6oZcMUWhNOViSJZ-lKGx2lJ2ZBonw";
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    let botResponseText = 'Desculpe, não consegui gerar uma resposta no momento.';
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        botResponseText = result.candidates[0].content.parts[0].text;
+                    } else {
+                        console.error('Estrutura de resposta inesperada da API Gemini:', result);
+                    }
+
+                    const botResponse = {
+                        id: Date.now() + 1,
+                        text: botResponseText,
+                        sender: 'bot',
+                        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    };
+                    setMessages((prevMessages) => [...prevMessages, botResponse]);
+
+                } catch (error) {
+                    console.error('Erro ao chamar a API do Gemini:', error);
+                    const errorMessage = {
+                        id: Date.now() + 1,
+                        text: 'Ocorreu um erro ao tentar obter uma resposta. Por favor, tente novamente.',
+                        sender: 'bot',
+                        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                    };
+                    setMessages((prevMessages) => [...prevMessages, errorMessage]);
+                } finally {
+                    setIsBotTyping(false); // O bot para de "digitar"
+                }
+            };
+
+            // Função para lidar com a tecla Enter
+            const handleKeyPress = (e) => {
+                if (e.key === 'Enter') {
+                    handleSendMessage();
+                }
+            };
+
+            // Componente para o ícone de visto (checkmark)
+            const CheckmarkIcon = ({ status }) => {
+                if (status === 'sent') {
+                    return (
+                        <svg className="checkmark-single" viewBox="0 0 16 15" width="16" height="15">
+                            <path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88l-1.477-1.478a.365.365 0 0 0-.51.063l-.478.372a.365.365 0 0 0 .063.51l1.98 1.98a.365.365 0 0 0 .51 0l6.452-6.452a.365.365 0 0 0 .063-.51z"/>
+                        </svg>
+                    );
+                } else if (status === 'delivered') {
+                    return (
+                        <span className="flex items-center">
+                            <svg className="checkmark-single" viewBox="0 0 16 15" width="16" height="15">
+                                <path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88l-1.477-1.478a.365.365 0 0 0-.51.063l-.478.372a.365.365 0 0 0 .063.51l1.98 1.98a.365.365 0 0 0 .51 0l6.452-6.452a.365.365 0 0 0 .063-.51z"/>
+                            </svg>
+                            <svg className="checkmark-single -ml-2" viewBox="0 0 16 15" width="16" height="15">
+                                <path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88l-1.477-1.478a.365.365 0 0 0-.51.063l-.478.372a.365.365 0 0 0 .063.51l1.98 1.98a.365.365 0 0 0 .51 0l6.452-6.452a.365.365 0 0 0 .063-.51z"/>
+                            </svg>
+                        </span>
+                    );
+                } else if (status === 'read') {
+                    return (
+                        <span className="flex items-center">
+                            <svg className="checkmark-double" viewBox="0 0 16 15" width="16" height="15">
+                                <path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88l-1.477-1.478a.365.365 0 0 0-.51.063l-.478.372a.365.365 0 0 0 .063.51l1.98 1.98a.365.365 0 0 0 .51 0l6.452-6.452a.365.365 0 0 0 .063-.51z"/>
+                            </svg>
+                            <svg className="checkmark-double -ml-2" viewBox="0 0 16 15" width="16" height="15">
+                                <path fill="currentColor" d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88l-1.477-1.478a.365.365 0 0 0-.51.063l-.478.372a.365.365 0 0 0 .063.51l1.98 1.98a.365.365 0 0 0 .51 0l6.452-6.452a.365.365 0 0 0 .063-.51z"/>
+                            </svg>
+                        </span>
+                    );
+                }
+                return null;
+            };
+
+
+            return (
+                <div className="flex h-screen w-screen overflow-hidden font-inter">
+                    {/* Barra Lateral Esquerda */}
+                    <div className="hidden md:flex w-1/3 lg:w-1/4 flex-col border-r border-gray-200 bg-gray-100">
+                        {/* Cabeçalho da Barra Lateral */}
+                        <div className="flex items-center justify-between p-4 bg-gray-200 border-b border-gray-300">
+                            <div className="flex items-center">
+                                <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white text-lg font-bold">
+                                    U
+                                </div>
+                                <div className="ml-3 text-lg font-semibold text-gray-800">Conversas</div>
+                            </div>
+                            <div className="flex space-x-4 text-gray-600">
+                                {/* Ícone de Nova Conversa */}
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 cursor-pointer hover:text-gray-800 transition duration-200 ease-in-out transform hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                {/* Ícone de Menu */}
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 cursor-pointer hover:text-gray-800 transition duration-200 ease-in-out transform hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        {/* Barra de Pesquisa */}
+                        <div className="p-3 border-b border-gray-200">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Pesquisar ou iniciar uma nova conversa"
+                                    className="w-full p-2 pl-10 rounded-lg bg-white border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                                />
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        {/* Lista de Chats */}
+                        <div className="flex-1 overflow-y-auto">
+                            {/* Chat Mentoria777 */}
+                            <div className="flex items-center p-3 hover:bg-gray-200 cursor-pointer border-b border-gray-200 bg-white transition duration-200 ease-in-out hover:shadow-md">
+                                <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
+                                    <img src="https://placehold.co/48x48/075E54/FFFFFF?text=M777" alt="Mentoria777" className="w-full h-full object-cover" />
+                                </div>
+                                <div className="ml-3 flex-1">
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-semibold text-gray-900">Mentoria777</span>
+                                        <span className="text-xs text-gray-500">10:30</span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 truncate">Olá! Como posso ajudar você hoje?</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Área Principal do Chat */}
+                    <div className="flex-1 flex flex-col bg-whatsapp-chat-bg whatsapp-background-pattern">
+                        {/* Cabeçalho do Chat */}
+                        <div className="flex items-center justify-between p-4 bg-gray-200 border-b border-gray-300 shadow-md">
+                            <div className="flex items-center">
+                                <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
+                                    <img src="https://placehold.co/48x48/075E54/FFFFFF?text=M777" alt="Mentoria777" className="w-full h-full object-cover" />
+                                </div>
+                                <div className="ml-4 flex items-center">
+                                    <span className="font-bold text-xl text-gray-900">Mentoria777</span>
+                                    {/* Selo de Verificado SVG */}
+                                    <svg
+                                        className="ml-2 w-5 h-5 text-blue-600"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                        <path
+                                            fillRule="evenodd"
+                                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                            clipRule="evenodd"
+                                        ></path>
+                                    </svg>
+                                    {/* Indicador de Online */}
+                                    <span className="ml-2 w-2.5 h-2.5 bg-green-500 rounded-full shadow-sm"></span>
+                                </div>
+                            </div>
+                            <div className="flex space-x-6 text-gray-600">
+                                {/* Ícone de Chamada de Vídeo */}
+                                <button className="p-1 rounded-full hover:bg-gray-300 transition duration-200 ease-in-out transform hover:scale-110">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 cursor-pointer hover:text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                </button>
+                                {/* Ícone de Chamada de Voz */}
+                                <button className="p-1 rounded-full hover:bg-gray-300 transition duration-200 ease-in-out transform hover:scale-110">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 cursor-pointer hover:text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                    </svg>
+                                </button>
+                                {/* Ícone de Pesquisa */}
+                                <button className="p-1 rounded-full hover:bg-gray-300 transition duration-200 ease-in-out transform hover:scale-110">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 cursor-pointer hover:text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                    </svg>
+                                </button>
+                                {/* Ícone de Menu de Opções */}
+                                <button className="p-1 rounded-full hover:bg-gray-300 transition duration-200 ease-in-out transform hover:scale-110">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 cursor-pointer hover:text-gray-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Área de Exibição de Mensagens */}
+                        <div className="flex-1 p-6 overflow-y-auto whatsapp-background-pattern">
+                            {/* Banner de Criptografia */}
+                            <div className="flex justify-center mb-6">
+                                <div className="bg-whatsapp-dark-green text-white text-xs px-4 py-2 rounded-lg shadow-md flex items-center space-x-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                    </svg>
+                                    <span>As mensagens são protegidas com a criptografia de ponta a ponta.</span>
+                                </div>
+                            </div>
+
+                            {/* Separador de Data "HOJE" */}
+                            <div className="flex justify-center mb-6">
+                                <div className="bg-gray-300 text-gray-700 text-xs px-3 py-1 rounded-full shadow-sm">
+                                    HOJE
+                                </div>
+                            </div>
+
+                            {messages.map((message) => (
+                                <div
+                                    key={message.id}
+                                    className={`flex mb-2 ${message.sender === 'user' ? 'justify-end' : 'justify-start'} message-fade-in`}
+                                >
+                                    <div
+                                        className={`relative max-w-[70%] p-2 px-3 shadow-lg text-sm ${ /* Sombra mais pronunciada */
+                                            message.sender === 'user'
+                                                ? 'bg-whatsapp-user-bubble text-gray-900 rounded-message-user ml-auto'
+                                                : 'bg-whatsapp-bot-bubble text-gray-800 rounded-message-bot mr-auto'
+                                        }`}
+                                    >
+                                        <p className="pb-4">{message.text}
+                                            {message.sender === 'user' && (
+                                                <span className="absolute bottom-1 right-2 text-whatsapp-timestamp flex items-center">
+                                                    {message.timestamp}
+                                                    <CheckmarkIcon status={message.status} />
+                                                </span>
+                                            )}
+                                            {message.sender === 'bot' && (
+                                                <span className="absolute bottom-1 right-2 text-whatsapp-timestamp">
+                                                    {message.timestamp}
+                                                </span>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {/* Indicador de digitação do bot */}
+                            {isBotTyping && (
+                                <div className="flex justify-start mb-2 message-fade-in">
+                                    <div className="relative max-w-[70%] p-2 px-3 shadow-lg text-sm bg-whatsapp-bot-bubble text-gray-800 rounded-message-bot mr-auto">
+                                        <div className="typing-indicator flex items-center space-x-1">
+                                            <span className="text-gray-600 mr-1">digitando</span>
+                                            <span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span>
+                                            <span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span>
+                                            <span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div ref={messagesEndRef} /> {/* Elemento para rolar para */}
+                        </div>
+
+                        {/* Área de Entrada de Mensagens */}
+                        <div className="flex items-center p-3 bg-gray-200 border-t border-gray-300 shadow-xl"> {/* Sombra mais pronunciada */}
+                            {/* Ícone de Emoji */}
+                            <button className="p-2 text-gray-600 hover:text-gray-800 focus:outline-none transition duration-200 ease-in-out transform hover:scale-110">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </button>
+                            {/* Ícone de Anexo */}
+                            <button className="p-2 text-gray-600 hover:text-gray-800 focus:outline-none transition duration-200 ease-in-out transform hover:scale-110">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13.5" />
+                                </svg>
+                            </button>
+
+                            <input
+                                type="text"
+                                placeholder="Mensagem"
+                                className="flex-1 mx-2 p-2.5 rounded-lg bg-white border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-md"
+                                value={inputMessage}
+                                onChange={(e) => setInputMessage(e.target.value)}
+                                onKeyPress={handleKeyPress}
+                            />
+                            <button
+                                onClick={handleSendMessage}
+                                className="ml-2 p-2.5 text-white rounded-full focus:outline-none focus:ring-2 focus:ring-whatsapp-dark-green shadow-lg transition duration-200 ease-in-out transform hover:scale-105"
+                                style={{ background: 'linear-gradient(to right, #075E54, #128C7E)' }} /* Gradiente no botão */
+                            >
+                                <svg
+                                    className="w-6 h-6"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                >
+                                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+                                </svg>
+                            </button>
+                            {/* Ícone de Microfone - Apenas aparece se o campo de entrada estiver vazio */}
+                            {inputMessage.trim() === '' && (
+                                <button className="ml-2 p-2.5 bg-gray-300 text-gray-600 rounded-full hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 shadow-md transition duration-200 ease-in-out transform hover:scale-105">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-14 0v-1a7 7 0 0114 0v1zm-7 4v2m-6 0h12a2 2 0 002-2v-1a2 2 0 00-2-2H6a2 2 0 00-2 2v1a2 2 0 002 2z" />
+                                    </svg>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Renderiza o componente App no elemento com id "root"
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
