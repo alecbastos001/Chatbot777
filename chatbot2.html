@@ -511,7 +511,8 @@
                         </div>
 
                         {/* Área de Entrada de Mensagens */}
-                        <div className="flex items-center p-3 bg-gray-200 border-t border-gray-300 shadow-xl"> {/* Sombra mais pronunciada */}
+                        {/* Ajustado p-3 para px-2 py-3 para mobile, e mx-2 no input para mx-1 */}
+                        <div className="flex items-center px-2 py-3 md:p-3 bg-gray-200 border-t border-gray-300 shadow-xl">
                             {/* Ícone de Emoji */}
                             <button className="p-2 text-gray-600 hover:text-gray-800 focus:outline-none transition duration-200 ease-in-out transform hover:scale-110">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -528,14 +529,14 @@
                             <input
                                 type="text"
                                 placeholder="Mensagem"
-                                className="flex-1 mx-2 p-2.5 rounded-lg bg-white border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-md"
+                                className="flex-1 mx-1 md:mx-2 p-2.5 rounded-lg bg-white border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-md"
                                 value={inputMessage}
                                 onChange={(e) => setInputMessage(e.target.value)}
                                 onKeyPress={handleKeyPress}
                             />
                             <button
                                 onClick={handleSendMessage}
-                                className="ml-2 p-2.5 text-white rounded-full focus:outline-none focus:ring-2 focus:ring-whatsapp-dark-green shadow-lg transition duration-200 ease-in-out transform hover:scale-105"
+                                className="ml-1 md:ml-2 p-2.5 text-white rounded-full focus:outline-none focus:ring-2 focus:ring-whatsapp-dark-green shadow-lg transition duration-200 ease-in-out transform hover:scale-105"
                                 style={{ background: 'linear-gradient(to right, #075E54, #128C7E)' }} /* Gradiente no botão */
                             >
                                 <svg
@@ -549,7 +550,7 @@
                             </button>
                             {/* Ícone de Microfone - Apenas aparece se o campo de entrada estiver vazio */}
                             {inputMessage.trim() === '' && (
-                                <button className="ml-2 p-2.5 bg-gray-300 text-gray-600 rounded-full hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 shadow-md transition duration-200 ease-in-out transform hover:scale-105">
+                                <button className="ml-1 md:ml-2 p-2.5 bg-gray-300 text-gray-600 rounded-full hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400 shadow-md transition duration-200 ease-in-out transform hover:scale-105">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-14 0v-1a7 7 0 0114 0v1zm-7 4v2m-6 0h12a2 2 0 002-2v-1a2 2 0 00-2-2H6a2 2 0 00-2 2v1a2 2 0 002 2z" />
                                     </svg>
