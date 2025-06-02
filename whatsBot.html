@@ -44,7 +44,7 @@
             animation: backgroundPan 60s linear infinite; /* Animação de movimento lento */
         }
 
-        @keyframes backgroundPan {
+        @frames backgroundPan {
             from { background-position: 0% 0%; }
             to { background-position: 100% 100%; }
         }
@@ -63,7 +63,7 @@
         }
 
         /* Animação de fade-in para mensagens */
-        @keyframes fadeIn {
+        @frames fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
@@ -72,7 +72,7 @@
         }
 
         /* Animação de entrada para a área principal do chat (aplicada ao #root) */
-        @keyframes siteLoadAnimation {
+        @frames siteLoadAnimation {
             from { opacity: 0; transform: scale(0.98); }
             to { opacity: 1; transform: scale(1); }
         }
@@ -246,7 +246,7 @@
                     const prompt = `Responda de forma concisa e conversacional, como um chatbot de WhatsApp, sem listas ou formatação extensa. ${inputMessage}`;
                     let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
                     const payload = { contents: chatHistory };
-                    const apiKey = ""; // A chave da API será fornecida pelo ambiente Canvas em tempo de execução
+                    const apiKey = "AIzaSyBeYR6oZcMUWhNOViSJZ-lKGx2lJ2ZBonw";
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
                     const response = await fetch(apiUrl, {
