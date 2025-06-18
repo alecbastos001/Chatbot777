@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot WhatsApp – Conversacional + Formulário</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        /* ===== Tailwind custom colours ===== */
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'whatsapp-dark-green': '#075E54',
+                        'whatsapp-light-green': '#128C7E',
+                        'whatsapp-chat-bg'  : '#ECE5DD',
+                        'whatsapp-user-bubble': '#DCF8C6',
+                        'whatsapp-bot-bubble' : '#FFFFFF',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* ===== identical a partir do ficheiro original ===== */
+        body{font-family:'Inter',sans-serif;margin:0;overflow:hidden;background-color:#ECE5DD}
+        .text-whatsapp-timestamp{color:#828282;font-size:0.65rem}
+        .whatsapp-background-pattern{background-image:url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d9d9d9' fill-opacity='0.2'%3E%3Cpath d='M0 40L40 0H20L0 20V40ZM40 40V20L20 40H40Z'/%3E%3C/g%3E%3C/svg%3E");background-repeat:repeat;background-size:40px;background-color:#ECE5DD;animation:backgroundPan 60s linear infinite}
+        @keyframes backgroundPan{from{background-position:0% 0%}to{background-position:100% 100%}}
+        .rounded-message-user{border-top-left-radius:.5rem;border-top-right-radius:.5rem;border-bottom-left-radius:.5rem;border-bottom-right-radius:.1rem}
+        .rounded-message-bot{border-top-left-radius:.5rem;border-top-right-radius:.5rem;border-bottom-left-radius:.1rem;border-bottom-right-radius:.5rem}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        .message-fade-in{animation:fadeIn .3s ease-out forwards}
+        @keyframes siteLoadAnimation{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:scale(1)}}
+        #root{animation:siteLoadAnimation .6s ease-out forwards}
+        .typing-indicator span{animation:blink 1s infinite}
+        .typing-indicator span:nth-child(2){animation-delay:.2s}
+        .typing-indicator span:nth-child(3){animation-delay:.4s}
+        @keyframes blink{0%,100%{opacity:.2}50%{opacity:1}}
+        .checkmark-single,.checkmark-double{fill:currentColor;width:14px;height:14px;margin-left:4px;vertical-align:middle}
+        .checkmark-single{color:#607d8b}.checkmark-double{color:#4CAF50}
+        @keyframes fadeOut{from{opacity:1}to{opacity:0;visibility:hidden}}
+        .loading-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background-color:#075E54;display:flex;justify-content:center;align-items:center;z-index:9999;opacity:1;transition:opacity .5s ease-out}
+        .loading-overlay.hidden{animation:fadeOut .5s forwards}
+        .loading-spinner{border:4px solid rgba(255,255,255,.3);border-top:4px solid #fff;border-radius:50%;width:50px;height:50px;animation:spin 1s linear infinite}
+        @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+    </style>
+</head>
+<body>
+    <!-- ===== Loading overlay ===== -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <div id="root" class="opacity-0"></div>
+
+    <!-- ===== React + Babel ===== -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        /*********************************************
+         * Conversational Form Steps definition
+         *********************************************/
+        const formSteps = [
+            { field: 'name',      question: '1. Qual seu nome?',                         validate: v => v.trim() !== '' },
+            { field: 'whatsapp', question: '2. Seu WhatsApp (ex: +55 11 91234-5678)',    validate: v => /\+?\d{9,16}/.test(v.replace(/\s|-/g,'')) },
+            { field: 'email',    question: '3. Seu Email',                              validate: v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) },
+            { field: 'niche',    question: '4. Qual nicho da sua empresa? (Tecnologia, Saúde, Educação, E-commerce, Outros)', validate: v => v.trim() !== '' },
+            { field: 'revenue',  question: '5. Faturamento mensal da sua empresa? (Até R$50K/mês, R$50-100K/mês, R$100-200K/mês, R$200-500K/mês, R$500K-1M/mês, +R$1M/mês)', validate: v => v.trim() !== '' },
+            { field: 'instagram',question: '6. Instagram da empresa (ex: @empresa)',     validate: v => v.trim() !== '' },
+            { field: 'deadline', question: '7. Qual prazo deseja iniciar o projeto? (Pra ONTEM!, Até 7 dias, Até 1 mês)', validate: v => v.trim() !== '' },
+            { field: 'priceOk',  question: '8. O valor de implantação é R$4.997 (12x de R$416,41 ou 10% OFF no PIX). Está de acordo? (Sim/Não)', validate: v => /sim|não|nao/i.test(v) },
+            { field: 'projectKnown', question: '9. Você já sabe qual projeto deseja implementar? (Sim / Não – se Sim, descreva brevemente após a palavra "Sim:")', validate: v => v.trim() !== '' },
+        ];
+
+        /*********************************************
+         * React Application
+         *********************************************/
+        function App() {
+            // ===== State =====
+            const [messages, setMessages] = React.useState([]); // chat history
+            const [inputMessage, setInputMessage] = React.useState(''); // textbox
+            const [isBotTyping, setIsBotTyping] = React.useState(false); // typing indicator
+            const [stepIndex, setStepIndex]   = React.useState(0);  // current form step (0..formSteps.length)
+            const [formData,  setFormData]    = React.useState({}); // collected answers
+            const [formDone,  setFormDone]    = React.useState(false); // wizard finished?
+
+            const messagesEndRef = React.useRef(null);
+
+            // ===== Scroll helper =====
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            };
+            React.useEffect(scrollToBottom, [messages, isBotTyping]);
+
+            // ===== Initial welcome & first question =====
+            React.useEffect(() => {
+                const loadingOverlay = document.getElementById('loading-overlay');
+                const rootElement    = document.getElementById('root');
+                // hide loader
+                setTimeout(() => {
+                    loadingOverlay.classList.add('hidden');
+                    rootElement.classList.remove('opacity-0');
+                }, 900);
+
+                // send welcome + first question
+                setTimeout(() => {
+                    pushBotMessage('Olá! Sou o assistente virtual da Mentoria777. Vou te fazer algumas perguntas rápidas para desenharmos seu projeto de IA. Vamos começar!');
+                    askCurrentQuestion(0);
+                }, 1400);
+            }, []);
+
+            /******************** Helper to push bot/user messages *******************/
+            const pushBotMessage = (text) => {
+                setMessages(prev => [...prev, {
+                    id: Date.now() + Math.random(),
+                    text,
+                    sender: 'bot',
+                    timestamp: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+                }]);
+            };
+            const pushUserMessage = (text) => {
+                setMessages(prev => [...prev, {
+                    id: Date.now(),
+                    text,
+                    sender: 'user',
+                    status: 'read',
+                    timestamp: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+                }]);
+            };
+
+            /******************** Ask a question *****************************/
+            const askCurrentQuestion = (idx) => {
+                if (idx < formSteps.length) {
+                    setIsBotTyping(true);
+                    setTimeout(() => {
+                        pushBotMessage(formSteps[idx].question);
+                        setIsBotTyping(false);
+                    }, 900);
+                }
+            };
+
+            /******************** Validate and store answer **********************/
+            const processFormAnswer = (text) => {
+                const step = formSteps[stepIndex];
+                if (!step.validate(text)) {
+                    pushBotMessage('Ooops, não entendi. Poderia responder novamente?');
+                    return;
+                }
+                // Save answer
+                setFormData(prev => ({ ...prev, [step.field]: text.trim() }));
+
+                // Special handling – revenue & price acceptance
+                if (step.field === 'revenue') {
+                    const insufficient = /^Até R\$50K|R\$50K-R\$100K|R\$100-200K/i.test(text);
+                    if (insufficient) {
+                        pushBotMessage('Para participar deste programa, precisamos de faturamento superior a R$200K/mês. Infelizmente você não se qualifica no momento.');
+                        setFormDone(true);
+                        return;
+                    }
+                }
+                if (step.field === 'priceOk' && /não|nao/i.test(text)) {
+                    pushBotMessage('Sem problemas, entendo que esteja fora do orçamento. Agradecemos o interesse!');
+                    setFormDone(true);
+                    return;
+                }
+
+                // Next step or finish
+                if (stepIndex + 1 < formSteps.length) {
+                    setStepIndex(stepIndex + 1);
+                    askCurrentQuestion(stepIndex + 1);
+                } else {
+                    pushBotMessage('🎉 Obrigado! Formulário concluído. Agora pode me perguntar o que quiser ou continuar a conversa.');
+                    setFormDone(true);
+                }
+            };
+
+            /******************** Send message handler *****************************/
+            const handleSendMessage = async () => {
+                const text = inputMessage.trim();
+                if (text === '') return;
+                setInputMessage('');
+                pushUserMessage(text);
+
+                // If form not done, treat answer as form flow
+                if (!formDone) {
+                    processFormAnswer(text);
+                    return; // don’t call Gemini yet
+                }
+
+                // After form: reach Gemini for free chat
+                setIsBotTyping(true);
+                try {
+                    const prompt = `Responda de forma concisa e conversacional, como um chatbot de WhatsApp, sem listas ou formatação extensa. ${text}`;
+                    const payload = { contents: [{ role:'user', parts:[{text: prompt}] }]};
+                    const apiKey  = 'AIzaSyBeYR6oZcMUWhNOViSJZ-lKGx2lJ2ZBonw';
+                    const apiUrl  = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                    const resp    = await fetch(apiUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+                    const data    = await resp.json();
+                    let answer    = 'Desculpe, não consegui gerar resposta no momento.';
+                    if (data.candidates?.[0]?.content?.parts?.[0]?.text) answer = data.candidates[0].content.parts[0].text;
+                    pushBotMessage(answer);
+                } catch (err) {
+                    console.error(err);
+                    pushBotMessage('Erro ao contactar serviço externo.');
+                } finally { setIsBotTyping(false); }
+            };
+
+            // ===== ENTER key shortcut =====
+            const handleKeyPress = (e) => { if (e.key === 'Enter') handleSendMessage(); };
+
+            /******************** Check icon component ********************/
+            const CheckmarkIcon = ({ status }) => {
+                if (status === 'read' || status === 'delivered') {
+                    return (
+                        <span className="flex items-center">
+                          <svg className={status==='read'?'checkmark-double':'checkmark-single'} viewBox="0 0 16 15"><path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88l-1.477-1.478a.365.365 0 0 0-.51.063l-.478.372a.365.365 0 0 0 .063.51l1.98 1.98a.365.365 0 0 0 .51 0l6.452-6.452a.365.365 0 0 0 .063-.51z"/></svg>
+                          {status==='read' && <svg className="checkmark-double -ml-2" viewBox="0 0 16 15"><path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.88l-1.477-1.478a.365.365 0 0 0-.51.063l-.478.372a.365.365 0 0 0 .063.51l1.98 1.98a.365.365 0 0 0 .51 0l6.452-6.452a.365.365 0 0 0 .063-.51z"/></svg>}
+                        </span>
+                    );
+                }
+                return null;
+            };
+
+            /******************** Render ********************/
+            return (
+                <div className="flex h-screen w-screen overflow-hidden font-inter">
+                    {/* Left sidebar hidden on mobile – unchanged */}
+                    <div className="hidden md:flex w-1/3 lg:w-1/4 flex-col border-r border-gray-200 bg-gray-100">
+                        {/* Cabeçalho da Barra Lateral */}
+                        <div className="flex items-center justify-between p-4 bg-gray-200 border-b border-gray-300">
+                            <div className="flex items-center">
+                                <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white text-lg font-bold">
+                                    U
+                                </div>
+                                <div className="ml-3 text-lg font-semibold text-gray-800">Conversas</div>
+                            </div>
+                            <div className="flex space-x-4 text-gray-600">
+                                {/* Ícone de Nova Conversa */}
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 cursor-pointer hover:text-gray-800 transition duration-200 ease-in-out transform hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                {/* Ícone de Menu */}
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 cursor-pointer hover:text-gray-800 transition duration-200 ease-in-out transform hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        {/* Barra de Pesquisa */}
+                        <div className="p-3 border-b border-gray-200">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Pesquisar ou iniciar uma nova conversa"
+                                    className="w-full p-2 pl-10 rounded-lg bg-white border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-sm"
+                                />
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        {/* Lista de Chats */}
+                        <div className="flex-1 overflow-y-auto">
+                            {/* Chat Mentoria777 */}
+                            <div className="flex items-center p-3 hover:bg-gray-200 cursor-pointer border-b border-gray-200 bg-white transition duration-200 ease-in-out hover:shadow-md">
+                                <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
+                                    <img src="https://placehold.co/48x48/075E54/FFFFFF?text=M777" alt="Mentoria777" className="w-full h-full object-cover" />
+                                </div>
+                                <div className="ml-3 flex-1">
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-semibold text-gray-900">Mentoria777</span>
+                                        <span className="text-xs text-gray-500">10:30</span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 truncate">Olá! Como posso ajudar você hoje?</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Chat area – mostly identical to original design */}
+                    <div className="flex-1 flex flex-col w-full bg-whatsapp-chat-bg whatsapp-background-pattern">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-4 bg-gray-200 border-b border-gray-300 shadow-md">
+                            <div className="flex items-center">
+                                <div className="w-12 h-12 rounded-full overflow-hidden flex-shrink-0">
+                                    <img src="https://placehold.co/48x48/075E54/FFFFFF?text=M777" alt="Mentoria777" className="w-full h-full object-cover" />
+                                </div>
+                                <div className="ml-4 flex items-center">
+                                    <span className="font-bold text-xl text-gray-900">Mentoria777</span>
+                                    <svg className="ml-2 w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path></svg>
+                                    <span className="ml-2 w-2.5 h-2.5 bg-green-500 rounded-full shadow-sm"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Messages */}
+                        <div className="flex-1 p-4 md:p-6 overflow-y-auto whatsapp-background-pattern">
+                            {/* Date separator – always "HOJE" for demo */}
+                            <div className="flex justify-center mb-6"><div className="bg-gray-300 text-gray-700 text-xs px-3 py-1 rounded-full shadow-sm">HOJE</div></div>
+                            {messages.map(msg => (
+                                <div key={msg.id} className={`flex mb-2 ${msg.sender==='user'?'justify-end':'justify-start'} message-fade-in`}>
+                                    <div className={`relative max-w-[70%] p-2 px-3 shadow-lg text-sm ${msg.sender==='user'?'bg-whatsapp-user-bubble text-gray-900 rounded-message-user ml-auto':'bg-whatsapp-bot-bubble text-gray-800 rounded-message-bot mr-auto'}`}>
+                                        <p className="pb-4 whitespace-pre-line">{msg.text}
+                                            <span className="absolute bottom-1 right-2 text-whatsapp-timestamp flex items-center">{msg.timestamp}{msg.sender==='user' && <CheckmarkIcon status={msg.status} />}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                            {isBotTyping && (
+                                <div className="flex justify-start mb-2 message-fade-in"><div className="relative max-w-[70%] p-2 px-3 shadow-lg text-sm bg-whatsapp-bot-bubble text-gray-800 rounded-message-bot mr-auto"><div className="typing-indicator flex items-center space-x-1"><span className="text-gray-600 mr-1">digitando</span><span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span><span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span><span className="w-1.5 h-1.5 bg-gray-500 rounded-full"></span></div></div></div>) }
+                            <div ref={messagesEndRef} />
+                        </div>
+
+                        {/* Input area */}
+                        <div className="flex items-center px-2 py-3 md:p-3 bg-gray-200 border-t border-gray-300 shadow-xl">
+                            <input type="text" placeholder="Mensagem" className="flex-1 mx-1 md:mx-2 p-2.5 rounded-lg bg-white border border-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-md" value={inputMessage} onChange={e=>setInputMessage(e.target.value)} onKeyPress={handleKeyPress} />
+                            <button onClick={handleSendMessage} className="ml-1 md:ml-2 p-2.5 text-white rounded-full focus:outline-none focus:ring-2 focus:ring-whatsapp-dark-green shadow-lg transition duration-200 ease-in-out transform hover:scale-105" style={{background:'linear-gradient(to right, #075E54, #128C7E)'}}>
+                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
